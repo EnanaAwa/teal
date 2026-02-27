@@ -7,3 +7,4 @@ from .teal_actor import TealActor
 from .teal_env import TealEnv
 from .teal_model import Teal
 from .utils import weight_initialization, uni_rand, print_
+from .dataset_loader.dataset_cluster import SingleClusterDataset

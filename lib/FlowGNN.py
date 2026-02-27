@@ -32,15 +32,17 @@ class FlowGNN(nn.Module):
         self.env = teal_env
         self.num_layer = num_layer
 
-        self.edge_index = self.env.edge_index
-        self.edge_index_values = self.env.edge_index_values
-        self.num_path = self.env.num_path
-        self.num_path_node = self.env.num_path_node
-        self.num_edge_node = self.env.num_edge_node
+        #self.edge_index = self.env.edge_index
+        #self.edge_index_values = self.env.edge_index_values
+        #self.num_path = self.env.num_path
+        #self.num_path_node = self.env.num_path_node
+        #self.num_edge_node = self.env.num_edge_node
         # self.adj_adj = torch.sparse_coo_tensor(self.edge_index,
         #    self.edge_index_values,
         #    [self.num_path_node + self.num_edge_node,
         #    self.num_path_node + self.num_edge_node])
+
+        self.num_path = self.env.num_path
 
         self.gnn_list = []
         self.dnn_list = []
@@ -55,6 +57,12 @@ class FlowGNN(nn.Module):
 
         # weight initialization for dnn and gnn
         self.apply(weight_initialization)
+    
+    def reset_topo(self):
+        self.edge_index = self.env.edge_index
+        self.edge_index_values = self.env.edge_index_values
+        self.num_path = self.env.num_path
+        self.num_path_node = self.env.num_path_node
 
     def forward(self, h_0):
         """Return embeddings after forward propagation

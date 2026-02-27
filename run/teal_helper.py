@@ -22,7 +22,7 @@ TM_MODELS = [
 SCALE_FACTORS = [1.0]
 OBJ_STRS = ["total_flow", "min_max_link_util"]
 
-PATH_FORM_HYPERPARAMS = (4, True, "min-hop")
+PATH_FORM_HYPERPARAMS = (4, False, "min-hop")
 
 PROBLEM_NAMES_AND_TM_MODELS = [
     (prob_name, tm_model) for prob_name in PROBLEM_NAMES
@@ -76,13 +76,15 @@ for key, vals in GROUPED_BY_HOLDOUT_PROBLEMS.items():
 
 
 def get_problems(args):
-    if (args.topo, args.tm_model, args.scale_factor) not in GROUPED_BY_PROBLEMS:
-        raise Exception('Traffic matrices not found')
-    problems = []
-    for topo_fname, tm_fname in GROUPED_BY_PROBLEMS[
-            (args.topo, args.tm_model, args.scale_factor)]:
-        problems.append((args.topo, topo_fname, tm_fname))
-    return problems
+    #FIXME: bypass all fucking problems for now
+    #if (args.topo, args.tm_model, args.scale_factor) not in GROUPED_BY_PROBLEMS:
+    #    raise Exception('Traffic matrices not found')
+    #problems = []
+    #for topo_fname, tm_fname in GROUPED_BY_PROBLEMS[
+    #        (args.topo, args.tm_model, args.scale_factor)]:
+    #    problems.append((args.topo, topo_fname, tm_fname))
+    #return problems
+    return None
 
 
 def get_args_and_problems(formatted_fname_template, additional_args=[]):
@@ -141,10 +143,10 @@ def get_args_and_problems(formatted_fname_template, additional_args=[]):
 
     # training hyper-parameters
     parser.add_argument(
-        '--lr', type=float, default=0.0001,
+        '--lr', type=float, default=0.001,
         help='learning rate')
     parser.add_argument(
-        '--epochs', type=int, default=0,
+        '--epochs', type=int, default=10,
         help='number of training epochs')
     parser.add_argument(
         '--bsz', type=int, default=20,

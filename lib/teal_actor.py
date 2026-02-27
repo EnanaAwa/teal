@@ -16,7 +16,12 @@ from .utils import weight_initialization, print_
 class TealActor(nn.Module):
 
     def __init__(
-            self, teal_env, num_layer, model_dir, model_save, device,
+            self, 
+            teal_env, 
+            num_layer, 
+            model_dir, 
+            model_save, 
+            device,
             std=1, log_std_min=-10.0, log_std_max=10.0):
         """Initialize teal actor.
 
@@ -36,7 +41,7 @@ class TealActor(nn.Module):
         # teal environment
         self.env = teal_env
         self.num_path = self.env.num_path
-        self.num_path_node = self.env.num_path_node
+        #self.num_path_node = self.env.num_path_node
 
         # init FlowGNN
         self.device = device
@@ -61,6 +66,10 @@ class TealActor(nn.Module):
         self.model_save = model_save
         # load model
         self.load_model()
+    
+    def reset_num_path_node(self, num_path_node):
+        self.num_path_node = num_path_node
+        self.FlowGNN.reset_topo()
 
     def model_full_fname(self, model_dir, topo, num_layer, std):
         """Return full name of the ML model."""

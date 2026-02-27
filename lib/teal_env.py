@@ -5,6 +5,7 @@ import math
 import time
 import random
 from itertools import product
+from collections import defaultdict
 
 from networkx.readwrite import json_graph
 
@@ -51,6 +52,8 @@ class TealEnv(object):
         self.edge_disjoint = edge_disjoint
         self.dist_metric = dist_metric
 
+        self.training=True
+
         self.train_start, self.train_stop = train_size
         self.val_start, self.val_stop = val_size
         self.test_start, self.test_stop = test_size
@@ -58,19 +61,21 @@ class TealEnv(object):
         self.device = device
 
         # init matrices related to topology
-        self.G = self._read_graph_json(topo)
-        self.capacity = torch.FloatTensor(
-            [float(c_e) for u, v, c_e in self.G.edges.data('capacity')])
-        self.num_edge_node = len(self.G.edges)
-        self.num_path_node = self.num_path * self.G.number_of_nodes()\
-            * (self.G.number_of_nodes()-1)
-        self.edge_index, self.edge_index_values, self.p2e = \
-            self.get_topo_matrix(topo, num_path, edge_disjoint, dist_metric)
+        #self.G = self._read_graph_json(topo)
+        #self.capacity = torch.FloatTensor(
+        #    [float(c_e) for u, v, c_e in self.G.edges.data('capacity')])
+        #self.num_edge_node = len(self.G.edges)
+        #self.num_path_node = self.num_path * self.G.number_of_nodes()\
+        #    * (self.G.number_of_nodes()-1)
+        #self.edge_index, self.edge_index_values, self.p2e = \
+        #    self.get_topo_matrix(topo, num_path, edge_disjoint, dist_metric)
 
-        # init ADMM
-        self.ADMM = ADMM(
-            self.p2e, self.num_path, self.num_path_node,
-            self.num_edge_node, rho, self.device)
+        ## init ADMM
+        #self.ADMM = ADMM(
+        #    self.p2e, self.num_path, self.num_path_node,
+        #    self.num_edge_node, rho, self.device)
+
+        self.rho = rho
 
         # min/max value when clamp raw action
         self.raw_action_min = raw_action_min
@@ -88,12 +93,35 @@ class TealEnv(object):
         else:
             self.idx_start, self.idx_stop = self.val_start, self.val_stop
         self.idx = self.idx_start
-        self.obs = self._read_obs()
+        #self.obs = self._read_obs()
 
     def get_obs(self):
         """Return observation (capacity + traffic matrix)."""
-
         return self.obs
+    
+    def set_topo_info(self, p2e):
+        self.num_edge_node = p2e.size(1)
+        self.num_path_node = p2e.size(0)
+        self.p2e_mat = p2e
+        (
+            self.edge_index, \
+                self.edge_index_values, \
+                    self.p2e
+        ) = self._get_topo_matrix_kaete(p2e)
+
+        self.ADMM = ADMM(
+            self.p2e,
+            self.num_path,
+            self.num_path_node,
+            self.num_edge_node,
+            self.rho,
+            self.device
+        )
+    
+    def set_obs(self, capacities, tms):
+        self.capacity = capacities,
+        obs = torch.concat([capacities, tms]).to(self.device)
+        self.obs = obs
 
     def _read_obs(self):
         """Return observation (capacity + traffic matrix) from files."""
@@ -154,7 +182,7 @@ class TealEnv(object):
         """
 
         info = {}
-        if self.idx_start == self.train_start:
+        if self.training:
             reward = self.take_action(raw_action, num_sample)
         else:
             start_time = time.time()
@@ -168,7 +196,7 @@ class TealEnv(object):
             reward = self.get_obj(action)
 
         # next observation
-        self._next_obs()
+        #self._next_obs()
         return reward, info
 
     def get_obj(self, action):
@@ -414,6 +442,39 @@ class TealEnv(object):
             elif len(path_dict[(s_k, t_k)]) > self.num_path:
                 path_dict[(s_k, t_k)] = path_dict[(s_k, t_k)][:self.num_path]
         return path_dict
+    
+    def _get_topo_matrix_kaete(
+        self, p2e
+    ):
+        # edge_index
+        num_edges = p2e.size(1)
+        indices = p2e.coalesce().indices()
+        path_indices = num_edges + indices[0,:]
+        edge_indices = indices[1,:]
+
+        row_indices = torch.cat([path_indices, edge_indices], dim=0).tolist()
+        col_indices = torch.cat([edge_indices, path_indices], dim=0).tolist()
+
+        node_to_degree = defaultdict(int)
+        for (u, v) in zip(row_indices, col_indices):
+            node_to_degree[u] += 1
+            node_to_degree[v] += 1
+        
+        gnn_values = torch.tensor(
+            [
+                1/math.sqrt(node_to_degree[u] * node_to_degree[v])
+                for (u, v) in zip(
+                    row_indices, col_indices
+                )
+            ],
+            dtype=torch.float32
+        ).to(self.device)
+        gnn_edge_indices = torch.tensor(
+            [row_indices, col_indices],
+            dtype=torch.long,
+            device=self.device
+        )
+        return gnn_edge_indices, gnn_values, indices.to(self.device)
 
     def get_topo_matrix(self, topo, num_path, edge_disjoint, dist_metric):
         """
