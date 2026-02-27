@@ -10,7 +10,10 @@ from networkx.readwrite import json_graph
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader
+from torch.utils.data import (
+    DataLoader,
+    SubsetRandomSampler
+)
 
 from .teal_actor import TealActor
 from .teal_env import TealEnv
@@ -19,7 +22,16 @@ from .utils import print_
 from .dataset_loader.dataset_cluster import SingleClusterDataset
 
 class Teal():
-    def __init__(self, teal_env, teal_actor, lr, early_stop):
+    def __init__(
+        self, 
+        data_dir,
+        topo_name,
+        num_path,
+        batch_size,
+        teal_env, 
+        teal_actor, 
+        lr, 
+        early_stop):
         """Initialize Teal model.
 
         Args:
@@ -29,43 +41,44 @@ class Teal():
             early_stop: whether to early stop
         """
 
+        self.data_dir = data_dir
+        self.topo_name = topo_name
+        self.num_path = num_path
+        self.batch_size = batch_size
         self.env = teal_env
         self.actor = teal_actor
 
-        # TODO: tidy up these things
-        
-        DATA_DIR = "/workspace/NetAI/data_kaete/geant"
-        self.train_loaders = []
-        self.val_loaders = []
-        self.test_loaders = []
 
-        self.train_loaders = [
-            torch.utils.data.DataLoader(
-                SingleClusterDataset(
-                    DATA_DIR,
-                    "geant",
-                    0,
-                    4,
-                    start=0,
-                    end=6000,
-                ),
-                batch_size=32,
-                shuffle=False
+        # TODO: tidy up these hyperparameters
+        NUM_CLUSTERS = 50
+        NUM_TRAIN_CLUSTERS = 30
+
+        if topo_name == "DynGEANT":
+            (
+                self.train_loaders, \
+                    self.val_loaders, \
+                        self.test_loaders
+            ) = _load_dyn_dataset(
+                self.data_dir,
+                self.topo_name,
+                self.num_path,
+                NUM_CLUSTERS,
+                NUM_TRAIN_CLUSTERS,
+                self.batch_size
             )
-        ]
-        self.val_loaders = [
-            torch.utils.data.DataLoader(
-                SingleClusterDataset(
-                    DATA_DIR,
-                    "geant",
-                    0, 4, 
-                    start=7000,
-                    end=9000
-                ),
-                batch_size=32,
-                shuffle=False
+        # TODO: load static dataset
+        else:
+            (
+                self.train_loaders, \
+                    self.val_loaders, \
+                        self.test_loaders
+            ) = _load_static_dataset(
+                self.data_dir,
+                self.topo_name,
+                self.num_path,
+                self.batch_size
             )
-        ]
+
 
         # init optimizer
         self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=lr)
@@ -86,7 +99,7 @@ class Teal():
         self.env.training = True
 
         for epoch in range(num_epoch):
-            for train_loader in self.train_loaders:
+            for train_loader in tqdm(self.train_loaders):
                 p2e_matrix = train_loader.dataset.pte
                 self.env.set_topo_info(p2e_matrix)
                 self.actor.reset_num_path_node(p2e_matrix.size(0))
@@ -182,29 +195,14 @@ class Teal():
 
                     obs = self.env.get_obs()
                     raw_action = self.actor.act(obs)
-                    reward, info = self.env.step(raw_action, num_admm_step=3)
+                    reward, info = self.env.step(raw_action)
                     rewards.append(reward.item() / opts[idx].item())
                 pbar.set_postfix({'rel_loss_mean': '%.7f' % (np.mean(rewards)),
                                   'rel_loss_min': '%.7f' % (np.min(rewards)),
                                   '1th': '%.7f' % (np.percentile(rewards, 1))})
         return rewards
-        #rewards = 0
-        #for idx in range(self.env.idx_start, self.env.idx_stop):
 
-        #    # get observation
-        #    problem_dict = self.env.render()
-        #    obs = self.env.get_obs()
-        #    # get action
-        #    raw_action = self.actor.act(obs)
-        #    # get reward
-        #    reward, info = self.env.step(raw_action)
-        #    # show satisfied demand instead of total flow
-        #    rewards += reward.item()/problem_dict['total_demand']\
-        #        if self.env.obj == 'total_flow' else reward.item()
-        #self.val_reward.append(
-        #    rewards/(self.env.idx_stop - self.env.idx_start))
-
-    def test(self, num_admm_step, output_header, output_csv, output_dir):
+    def test(self, num_admm_step, output_dir):
         """Test Teal model.
 
         Args:
@@ -216,71 +214,171 @@ class Teal():
 
         self.actor.eval()
         self.env.training = False
-        self.env.reset('test')
+        #self.env.reset('test')
 
-        with open(output_csv, "a") as results:
-            print_(",".join(output_header), file=results)
+        reward_lst = []
+        for test_loader in self.test_loaders:
+            p2e_matrix = test_loader.dataset.pte
+            self.env.set_topo_info(p2e_matrix)
+            self.actor.reset_num_path_node(p2e_matrix.size(0))
+            pbar = tqdm(test_loader, total=len(test_loader))
+            for (_, link_caps, tms, opts) in pbar:
+                batch_size = tms.size(0)
+                tms = tms.squeeze(dim=-1)
+                for idx in range(batch_size):
+                    tm = tms[idx,:]
+                    link_cap = link_caps[idx,:]
 
-            runtime_list, obj_list = [], []
-            loop_obj = tqdm(
-                range(self.env.idx_start, self.env.idx_stop),
-                desc="Testing: ")
+                    self.env.set_obs(link_cap, tm)
 
-            for idx in loop_obj:
+                    obs = self.env.get_obs()
+                    raw_action = self.actor.act(obs)
+                    reward, info = self.env.step(raw_action, num_admm_step=num_admm_step)
+                    reward_lst.append(reward.item() / opts[idx].item())
+                pbar.set_postfix({'rel_loss_mean': '%.7f' % (np.mean(reward_lst)),
+                                  'rel_loss_min': '%.7f' % (np.min(reward_lst)),
+                                  '1th': '%.7f' % (np.percentile(reward_lst, 1))})
+        _get_percentiles(
+            reward_lst,
+            [1, 5, 10, 25, 50, 75, 90, 99]
+        )
+        
 
-                # get observation
-                problem_dict = self.env.render()
-                obs = self.env.get_obs()
-                # get action
-                start_time = time.time()
-                raw_action = self.actor.act(obs)
-                runtime = time.time() - start_time
-                # get reward
-                reward, info = self.env.step(
-                    raw_action, num_admm_step=num_admm_step)
-                # add runtime in transforming, ADMM, rounding
-                runtime += info['runtime']
-                runtime_list.append(runtime)
-                # show satisfied demand instead of total flow
-                obj_list.append(
-                    reward.item()/problem_dict['total_demand']
-                    if self.env.obj == 'total_flow' else reward.item())
+def _get_percentiles(lst, p_lst):
+    print(f"rel loss mean = {np.mean(lst)}, min = {np.min(lst)}")
+    for p in p_lst:
+        print(f"{p}-th: {np.percentile(lst, p)}")
+    print(f"max = {np.max(lst)}")
 
-                # display avg runtime, obj
-                loop_obj.set_postfix({
-                    'runtime': '%.4f' % (sum(runtime_list)/len(runtime_list)),
-                    'obj': '%.4f' % (sum(obj_list)/len(obj_list)),
-                    })
+def _load_dyn_dataset(
+    data_dir,
+    topo_name,
+    num_paths,
+    num_clusters,
+    num_train_clusters,
+    batch_size: int = 16,
+    num_val_clusters: int = 5
+):
+    
+    num_train = (
+        num_train_clusters - \
+            num_val_clusters
+    )
+    train_loaders = []
+    for i in range(0, num_train):
+        dataset = SingleClusterDataset(
+            data_dir,
+            topo_name,
+            cluster_id=i,
+            num_paths_per_pair=num_paths
+        )
+        train_loaders.append(
+            torch.utils.data.DataLoader(
+                dataset,
+                batch_size=batch_size,
+                shuffle=True
+            )
+        )
+    
+    val_loaders = []
+    for i in range(num_train, num_train_clusters):
+        dataset = SingleClusterDataset(
+            data_dir,
+            topo_name,
+            cluster_id=i,
+            num_paths_per_pair=num_paths
+        )
+        val_loaders.append(
+            torch.utils.data.DataLoader(
+                dataset,
+                batch_size=batch_size,
+                shuffle=False
+            )
+        )
 
-                # save solution matrix
-                sol_mat = info['sol_mat']
-                torch.save(sol_mat, os.path.join(
-                    output_dir,
-                    "{}-{}-{}-teal_objective-{}_{}-paths_"
-                    "edge-disjoint-{}_dist-metric-{}_sol-mat.pt".format(
-                        problem_dict['problem_name'],
-                        problem_dict['traffic_model'],
-                        problem_dict['traffic_seed'],
-                        problem_dict['obj'],
-                        problem_dict['num_path'],
-                        problem_dict['edge_disjoint'],
-                        problem_dict['dist_metric'])))
+    test_loaders = []
+    for i in range(num_train_clusters, num_clusters):
+        dataset = SingleClusterDataset(
+            data_dir,
+            topo_name,
+            cluster_id=i,
+            num_paths_per_pair=num_paths
+        )
+        test_loaders.append(
+            torch.utils.data.DataLoader(
+                dataset,
+                batch_size=batch_size,
+                shuffle=False
+            )
+        )
+    
+    return train_loaders, val_loaders, test_loaders
 
-                PLACEHOLDER = ",".join("{}" for _ in output_header)
-                result_line = PLACEHOLDER.format(
-                    problem_dict['problem_name'],
-                    problem_dict['num_node'],
-                    problem_dict['num_edge'],
-                    problem_dict['traffic_seed'],
-                    problem_dict['scale_factor'],
-                    problem_dict['traffic_model'],
-                    problem_dict['total_demand'],
-                    "Teal",
-                    problem_dict['num_path'],
-                    problem_dict['edge_disjoint'],
-                    problem_dict['dist_metric'],
-                    problem_dict['obj'],
-                    reward,
-                    runtime)
-                print_(result_line, file=results)
-                # break
+
+def _load_static_dataset(
+    data_dir,
+    topo_name,
+    num_paths,
+    batch_size,
+    train_test_split: float = 0.75
+):
+    num_samples = _get_num_samples(data_dir)
+    print(f"topo_name: {topo_name}, num_samples: {num_samples}")
+    num_train = int(train_test_split * num_samples)
+
+    train_dataset = SingleClusterDataset(
+        data_dir,
+        topo_name,
+        0,
+        num_paths_per_pair=num_paths,
+        start=0,
+        end=num_train
+    )
+    
+    rng = np.random.default_rng(seed=42)
+    indices = rng.permutation(num_train).tolist()
+
+    num_train_samples = int(0.8 * num_train)
+    train_indices = indices[:num_train_samples]
+    eval_indices = indices[num_train_samples:]
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=batch_size,
+        sampler=SubsetRandomSampler(train_indices)
+    )
+    eval_loader = DataLoader(
+        train_dataset,
+        batch_size=batch_size,
+        sampler=SubsetRandomSampler(eval_indices)
+    )
+
+    test_dataset = SingleClusterDataset(
+        data_dir,
+        topo_name,
+        0,
+        num_paths_per_pair=num_paths,
+        start=num_train,
+        end=num_samples
+    )
+    test_loader = DataLoader(
+        test_dataset,
+        batch_size=batch_size,
+        shuffle=False
+    )
+    return [train_loader], [eval_loader], [test_loader]
+    
+
+def _get_num_samples(
+    data_dir
+):
+    catalog_path = os.path.join(
+        data_dir,
+        "Catalog/0",
+        "catalog_file.txt"
+    )
+    filenames = np.loadtxt(
+        catalog_path, 
+        dtype="U",
+        delimiter=","
+    ).reshape(-1, 3)
+    return filenames.shape[0]

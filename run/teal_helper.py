@@ -100,9 +100,26 @@ def get_args_and_problems(formatted_fname_template, additional_args=[]):
     parser.add_argument(
         "--tm-model", type=str, default='real', choices=TM_MODELS,
         help="traffic matrix model")
+    #parser.add_argument(
+    #    "--topo", type=str, required=True, choices=PROBLEM_NAMES,
+    #    help="network topology")
     parser.add_argument(
-        "--topo", type=str, required=True, choices=PROBLEM_NAMES,
-        help="network topology")
+        "--data_dir",
+        type=str,
+        default="/workspace/NetAI/data_kaete/DynGEANT"
+    )
+    parser.add_argument(
+        "--topo_name", 
+        type=str, 
+        required=True, 
+        #choices=PROBLEM_NAMES,
+        help="network topology"
+    )
+    parser.add_argument(
+        "--num_paths_per_pair", 
+        type=int, 
+        default=4,
+    )
     parser.add_argument(
         "--scale-factor", type=float, default=1.0, choices=SCALE_FACTORS,
         help="traffic matrix scale factor")
@@ -149,13 +166,13 @@ def get_args_and_problems(formatted_fname_template, additional_args=[]):
         '--epochs', type=int, default=10,
         help='number of training epochs')
     parser.add_argument(
-        '--bsz', type=int, default=20,
+        '--bsz', type=int, default=16,
         help='batch size')
     parser.add_argument(
         '--samples', type=int, default=5,
         help='number of COMA samples')
     parser.add_argument(
-        '--admm-steps', type=int, default=5,
+        '--admm-steps', type=int, default=3,
         help='number of ADMM steps')
     parser.add_argument(
         '--early-stop', type=bool, default=False,

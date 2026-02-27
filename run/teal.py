@@ -39,7 +39,10 @@ OUTPUT_CSV_TEMPLATE = "teal-{}-{}.csv"
 def benchmark(problems, output_csv, arg):
 
     num_path, edge_disjoint, dist_metric = PATH_FORM_HYPERPARAMS
-    obj, topo = args.obj, args.topo
+
+    num_path = args.num_paths_per_pair
+
+    obj, topo = args.obj, args.topo_name
     model_save = args.model_save
     device = torch.device(
         f"cuda:{args.devid}" if torch.cuda.is_available() else "cpu")
@@ -75,18 +78,25 @@ def benchmark(problems, output_csv, arg):
         val_size=val_size,
         test_size=test_size,
         num_failure=num_failure,
-        device=device)
+        device=device
+    )
     teal_actor = TealActor(
         teal_env=teal_env,
         num_layer=num_layer,
         model_dir=MODEL_DIR,
         model_save=model_save,
-        device=device)
+        device=device
+    )
     teal = Teal(
+        data_dir=args.data_dir,
+        topo_name=args.topo_name,
+        num_path=num_path,
+        batch_size=batch_size,
         teal_env=teal_env,
         teal_actor=teal_actor,
         lr=lr,
-        early_stop=early_stop)
+        early_stop=early_stop
+    )
 
     # ========== train and test
     teal.train(
@@ -94,11 +104,10 @@ def benchmark(problems, output_csv, arg):
         batch_size=batch_size,
         num_sample=num_sample
     )
-    #teal.test(
-    #    num_admm_step=num_admm_step,
-    #    output_header=HEADERS,
-    #    output_csv=output_csv,
-    #    output_dir=TOP_DIR)
+    teal.test(
+        num_admm_step=num_admm_step,
+        output_dir=TOP_DIR
+    )
 
     return
 
