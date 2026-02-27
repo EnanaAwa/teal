@@ -94,11 +94,10 @@ def benchmark(problems, output_csv, arg):
         batch_size=batch_size,
         num_sample=num_sample
     )
-    #teal.test(
-    #    num_admm_step=num_admm_step,
-    #    output_header=HEADERS,
-    #    output_csv=output_csv,
-    #    output_dir=TOP_DIR)
+    teal.test(
+        num_admm_step=num_admm_step,
+        output_dir=TOP_DIR
+    )
 
     return
 

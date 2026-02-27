@@ -109,6 +109,8 @@ class TealEnv(object):
                     self.p2e
         ) = self._get_topo_matrix_kaete(p2e)
 
+        #print(f"current p2e = {self.p2e.size()}")
+
         self.ADMM = ADMM(
             self.p2e,
             self.num_path,
@@ -206,7 +208,8 @@ class TealEnv(object):
             return action.sum(axis=-1)
         elif self.obj == 'min_max_link_util':
             return (torch_scatter.scatter(
-                action[self.p2e[0]], self.p2e[1]
+                action[self.p2e[0]], self.p2e[1],
+                dim_size=self.num_edge_node
                 )/self.obs[:-self.num_path_node]).max()
 
     def transform_raw_action(self, raw_action):
@@ -261,18 +264,25 @@ class TealEnv(object):
             for round_iter in range(num_round_iter):
                 # flow on each edge
                 edge_flow = torch_scatter.scatter(
-                    path_flow[self.p2e[0]], self.p2e[1])
+                    path_flow[self.p2e[0]], self.p2e[1], 
+                    dim_size=self.num_edge_node
+                )
                 # util of each edge
                 util = 1 + (edge_flow/capacity-1).relu()
                 # propotionally cut path flow by max util
                 util = torch_scatter.scatter(
-                    util[self.p2e[1]], self.p2e[0], reduce="max")
+                    util[self.p2e[1]], self.p2e[0], 
+                    reduce="max", 
+                    dim_size=self.num_path_node
+                )
                 path_flow_allocated = path_flow/util
                 # update total allocation, residual capacity, residual flow
                 path_flow_allocated_total += path_flow_allocated
                 if round_iter != num_round_iter - 1:
                     capacity = (capacity - torch_scatter.scatter(
-                        path_flow_allocated[self.p2e[0]], self.p2e[1])).relu()
+                        path_flow_allocated[self.p2e[0]], self.p2e[1],
+                        dim_size=self.num_edge_node
+                        )).relu()
                     path_flow = path_flow - path_flow_allocated
             action = path_flow_allocated_total
 
@@ -300,7 +310,10 @@ class TealEnv(object):
         '''
 
         path_flow = self.transform_raw_action(raw_action)
-        edge_flow = torch_scatter.scatter(path_flow[self.p2e[0]], self.p2e[1])
+        edge_flow = torch_scatter.scatter(
+            path_flow[self.p2e[0]], self.p2e[1], dim_size=self.num_edge_node)
+        #print(f"edge_flow = {edge_flow.size()}, self.obs = {self.obs.size()}, num_path_node = {self.num_path_node}, num_edge_node = {self.num_edge_node}")
+        #print(f"p2e_mat = {self.p2e_mat.size()}")
         util = edge_flow/self.obs[:-self.num_path_node]
 
         # sample from uniform distribution [mean_min, min_max]
@@ -313,14 +326,14 @@ class TealEnv(object):
 
             # find bottlenack edge for each path
             util, path_bottleneck = torch_scatter.scatter_max(
-                util[self.p2e[1]], self.p2e[0])
+                util[self.p2e[1]], self.p2e[0], dim_size=self.num_path_node)
             path_bottleneck = self.p2e[1][path_bottleneck]
 
             # prepare -path_flow/util^2 for reward
             coef = path_flow/util**2
             coef[util < 1] = 0
             coef = torch_scatter.scatter(
-                coef, path_bottleneck).reshape(-1, 1)
+                coef, path_bottleneck, dim_size=self.num_edge_node).reshape(-1, 1)
 
             # prepare path_util to bottleneck edge_util
             bottleneck_p2e = torch.sparse_coo_tensor(
