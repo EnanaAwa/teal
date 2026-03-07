@@ -46,7 +46,7 @@ class ADMM():
 
         num_edges_for_path = torch_scatter.scatter(
             torch.ones(self.p2e.shape[1]).to(self.device),
-            self.p2e[0])
+            self.p2e[0], dim_size=self.num_path_node)
         A_d_inv = torch.stack(
             [torch.linalg.inv(torch.diag(ele) + 1) for ele
                 in num_edges_for_path.reshape(-1, self.num_path)])
@@ -85,7 +85,7 @@ class ADMM():
         self.s1 = self.l1 / self.rho \
             + (self.d - self.x.reshape(-1, self.num_path).sum(1))
         self.s3 = self.l3 / self.rho \
-            + (self.c - torch_scatter.scatter(self.z, self.p2e[1]))
+            + (self.c - torch_scatter.scatter(self.z, self.p2e[1], dim_size=self.num_edge_node))
 
         self.s1 = self.s1.relu()
         self.s3 = self.s3.relu()
@@ -101,7 +101,7 @@ class ADMM():
             + self.rho*(-self.d + self.s1)[:, None]\
             + torch_scatter.scatter(
                 self.l4-self.rho*self.z,
-                self.p2e[0]).reshape(-1, self.num_path)
+                self.p2e[0], dim_size=self.num_path_node).reshape(-1, self.num_path)
 
         self.x = -torch.einsum(
             "nab,nb->na",
@@ -139,6 +139,8 @@ class ADMM():
 
         # z = - A_e_inv * b_e = sum b_e / (|b_e| + 1) - b
         # use b_extra and p2e_1_extra for |b_e| + 1
+
+        # FIXME: ???
         b_mean = torch_scatter.scatter(
             torch.concat([b, self.b_extra]),
             torch.concat([p2e_1, self.p2e_1_extra]), reduce='mean')
@@ -164,7 +166,7 @@ class ADMM():
         self.l1 = self.l1 + self.rho * (
             self.d - self.x.reshape(-1, self.num_path).sum(1) - self.s1)
         self.l3 = self.l3 + self.rho * (
-            self.c - torch_scatter.scatter(self.z, self.p2e[1]) - self.s3)
+            self.c - torch_scatter.scatter(self.z, self.p2e[1], dim_size=self.num_edge_node) - self.s3)
         self.l4 = self.l4 + self.rho * (
             self.x[self.p2e[0]] - self.z)
 

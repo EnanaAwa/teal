@@ -4,6 +4,7 @@ from teal_helper import get_args_and_problems, print_, PATH_FORM_HYPERPARAMS
 
 import os
 import sys
+import datetime
 
 import torch
 
@@ -98,6 +99,24 @@ def benchmark(problems, output_csv, arg):
         early_stop=early_stop
     )
 
+    # TODO: tidy up
+    OUT_DIR_BASE = "/workspace/NetAI/KaeTE-project/KaeTE_results/results"
+
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    exp_name = os.path.join(
+        args.topo_name,
+        "teal",
+        f"epoch{num_epoch}_b{batch_size}_lr{lr}_admm{num_admm_step}-{timestamp}.json"
+    )
+    output_path = os.path.join(
+        OUT_DIR_BASE,
+        exp_name
+    )
+    output_dir = os.path.dirname(output_path)
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir, exist_ok=True)
+    print(f"Teal log path: {output_path}")
+
     # ========== train and test
     teal.train(
         num_epoch=num_epoch,
@@ -106,9 +125,8 @@ def benchmark(problems, output_csv, arg):
     )
     teal.test(
         num_admm_step=num_admm_step,
-        output_dir=TOP_DIR
+        output_path=output_path
     )
-
     return
 
 

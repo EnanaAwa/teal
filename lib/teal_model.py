@@ -195,14 +195,14 @@ class Teal():
 
                     obs = self.env.get_obs()
                     raw_action = self.actor.act(obs)
-                    reward, info = self.env.step(raw_action)
+                    reward, info = self.env.step(raw_action, num_admm_step=0)
                     rewards.append(reward.item() / opts[idx].item())
                 pbar.set_postfix({'rel_loss_mean': '%.7f' % (np.mean(rewards)),
                                   'rel_loss_min': '%.7f' % (np.min(rewards)),
                                   '1th': '%.7f' % (np.percentile(rewards, 1))})
         return rewards
 
-    def test(self, num_admm_step, output_dir):
+    def test(self, num_admm_step, output_path):
         """Test Teal model.
 
         Args:
@@ -242,6 +242,12 @@ class Teal():
             reward_lst,
             [1, 5, 10, 25, 50, 75, 90, 99]
         )
+        print(f"Saving teal results to: {output_path}")
+        with open(output_path, "w") as f:
+            json.dump(
+                {"results": reward_lst},
+                f
+            )
         
 
 def _get_percentiles(lst, p_lst):

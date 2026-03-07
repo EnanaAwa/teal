@@ -20,4 +20,7 @@ run_teal() {
 
 cd ./run
 #run_teal DynGEANT 0.001 16 3 3
-run_teal abilene 0.001 16 3 3
+run_teal DynGEANT 0.001 16 5 3
+run_teal geant 0.001 16 5 3
+run_teal abilene 0.001 16 5 3
+#run_teal abilene 0.001 16 3 3
