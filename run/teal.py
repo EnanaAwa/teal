@@ -117,16 +117,23 @@ def benchmark(problems, output_csv, arg):
         os.makedirs(output_dir, exist_ok=True)
     print(f"Teal log path: {output_path}")
 
-    # ========== train and test
-    teal.train(
-        num_epoch=num_epoch,
-        batch_size=batch_size,
-        num_sample=num_sample
-    )
-    teal.test(
-        num_admm_step=num_admm_step,
-        output_path=output_path
-    )
+    # ========== profile or train/test
+    if args.profile_inference:
+        teal.profile_inference(
+            num_admm_step=num_admm_step,
+            output_dir=args.profile_result_dir,
+            warmup_samples=args.profile_warmup_samples
+        )
+    else:
+        teal.train(
+            num_epoch=num_epoch,
+            batch_size=batch_size,
+            num_sample=num_sample
+        )
+        teal.test(
+            num_admm_step=num_admm_step,
+            output_path=output_path
+        )
     return
 
 

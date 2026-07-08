@@ -248,6 +248,107 @@ class Teal():
                 {"results": reward_lst},
                 f
             )
+
+    @torch.no_grad()
+    def profile_inference(
+        self,
+        num_admm_step,
+        output_dir="/workspace/NetAI/KaeTE/results/profile/teal",
+        warmup_samples=20
+    ):
+        """Profile TEAL end-to-end inference time on test loaders.
+
+        The timed region covers one sample's TEAL inference path:
+        set_obs -> actor.act -> env.step. Topology setup and DataLoader
+        iteration are intentionally outside the timing window.
+        """
+        self.actor.eval()
+        self.env.training = False
+
+        latencies_s = []
+        samples_seen = 0
+
+        for test_loader in self.test_loaders:
+            p2e_matrix = test_loader.dataset.pte
+            self.env.set_topo_info(p2e_matrix)
+            self.actor.reset_num_path_node(p2e_matrix.size(0))
+            self._sync_device()
+
+            for (_, link_caps, tms, _) in test_loader:
+                batch_size = tms.size(0)
+                tms = tms.squeeze(dim=-1)
+                for idx in range(batch_size):
+                    tm = tms[idx, :]
+                    link_cap = link_caps[idx, :]
+
+                    self._sync_device()
+                    start_time = time.perf_counter()
+                    self.env.set_obs(link_cap, tm)
+                    obs = self.env.get_obs()
+                    raw_action = self.actor.act(obs)
+                    self.env.step(raw_action, num_admm_step=num_admm_step)
+                    self._sync_device()
+                    elapsed_s = time.perf_counter() - start_time
+
+                    samples_seen += 1
+                    if samples_seen > warmup_samples:
+                        latencies_s.append(elapsed_s)
+
+        if not latencies_s:
+            raise RuntimeError(
+                f"No timed TEAL samples. warmup_samples={warmup_samples}, "
+                f"samples_seen={samples_seen}"
+            )
+
+        profile_log = {
+            "topo_name": self.topo_name,
+            "method": "teal",
+            "dataset_dir": self.data_dir,
+            "device": str(self.env.device),
+            "batch_size": self.batch_size,
+            "num_test_loaders": len(self.test_loaders),
+            "num_seen_samples": samples_seen,
+            "num_timed_samples": len(latencies_s),
+            "warmup_samples": warmup_samples,
+            "measure": "teal_end_to_end",
+            "timed_region": "set_obs -> actor.act -> env.step",
+            "topology_setup_included": False,
+            "admm_steps": num_admm_step,
+            "mean_s": float(np.mean(latencies_s)),
+            "median_s": float(np.median(latencies_s)),
+            "min_s": float(np.min(latencies_s)),
+            "max_s": float(np.max(latencies_s)),
+            "p90_s": float(np.percentile(latencies_s, 90)),
+            "p95_s": float(np.percentile(latencies_s, 95)),
+            "p99_s": float(np.percentile(latencies_s, 99)),
+            "std_s": float(np.std(latencies_s)),
+            "timestamp": time.strftime("%Y%m%d_%H%M%S"),
+        }
+
+        print(
+            "FINAL_AVG_INFERENCE_TIME_S "
+            f"topology={self.topo_name} method=teal "
+            f"skipped={warmup_samples} "
+            f"timed_samples={profile_log['num_timed_samples']} "
+            f"avg_s={profile_log['mean_s']:.9f}"
+        )
+        self._save_profile_logs(profile_log, output_dir)
+        return profile_log
+
+    def _save_profile_logs(self, profile_log, output_dir):
+        os.makedirs(output_dir, exist_ok=True)
+        output_path = os.path.join(
+            output_dir,
+            f"{self.topo_name}_bs{self.batch_size}_"
+            f"{profile_log['timestamp']}_trainer_profile.json"
+        )
+        with open(output_path, "w") as f:
+            json.dump({"results": [profile_log]}, f, indent=2)
+        print(f"Saved TEAL inference profile to: {output_path}")
+
+    def _sync_device(self):
+        if self.env.device.type == "cuda":
+            torch.cuda.synchronize(self.env.device)
         
 
 def _get_percentiles(lst, p_lst):

@@ -181,6 +181,24 @@ def get_args_and_problems(formatted_fname_template, additional_args=[]):
     # testing hyper-parameters
     parser.add_argument(
         '--failures', type=int, default=0, help='number of edge failures')
+    parser.add_argument(
+        "--profile-inference",
+        dest="profile_inference",
+        default=False,
+        action="store_true",
+        help="Profile TEAL end-to-end inference time on the test loaders.")
+    parser.add_argument(
+        "--profile-warmup-samples",
+        dest="profile_warmup_samples",
+        type=int,
+        default=20,
+        help="Number of initial test samples to skip while profiling.")
+    parser.add_argument(
+        "--profile-result-dir",
+        dest="profile_result_dir",
+        type=str,
+        default="/workspace/NetAI/KaeTE/results/profile/teal",
+        help="Directory for TEAL inference profile logs.")
 
     for add_arg in additional_args:
         name_or_flags, kwargs = add_arg[0], add_arg[1]
