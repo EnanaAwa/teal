@@ -83,6 +83,9 @@ class TealEnv(object):
 
         self.reset('train')
 
+    def is_mlu_obj(self):
+        return self.obj in ('min_max_link_util', 'mlu')
+
     def reset(self, mode='test'):
         """Reset the initial conditions in the beginning."""
 
@@ -111,14 +114,15 @@ class TealEnv(object):
 
         #print(f"current p2e = {self.p2e.size()}")
 
-        self.ADMM = ADMM(
-            self.p2e,
-            self.num_path,
-            self.num_path_node,
-            self.num_edge_node,
-            self.rho,
-            self.device
-        )
+        if not self.is_mlu_obj():
+            self.ADMM = ADMM(
+                self.p2e,
+                self.num_path,
+                self.num_path_node,
+                self.num_edge_node,
+                self.rho,
+                self.device
+            )
     
     def set_obs(self, capacities, tms):
         self.capacity = capacities,
@@ -206,11 +210,8 @@ class TealEnv(object):
 
         if self.obj == 'total_flow':
             return action.sum(axis=-1)
-        elif self.obj == 'min_max_link_util':
-            return (torch_scatter.scatter(
-                action[self.p2e[0]], self.p2e[1],
-                dim_size=self.num_edge_node
-                )/self.obs[:-self.num_path_node]).max()
+        elif self.is_mlu_obj():
+            return self.get_edge_util(action).max()
 
     def transform_raw_action(self, raw_action):
         """Return network flow allocation as action.
@@ -223,9 +224,14 @@ class TealEnv(object):
             raw_action, min=self.raw_action_min, max=self.raw_action_max)
 
         # translate ML output to split ratio through softmax
-        # 1 in softmax represent unallocated traffic
         raw_action = raw_action.exp()
-        raw_action = raw_action/(1+raw_action.sum(axis=-1)[:, None])
+        if self.is_mlu_obj():
+            # MLU routes all demand; there is no link-capacity constraint and
+            # no unallocated-traffic option.
+            raw_action = raw_action/raw_action.sum(axis=-1)[:, None]
+        else:
+            # 1 in softmax represents unallocated traffic for throughput.
+            raw_action = raw_action/(1+raw_action.sum(axis=-1)[:, None])
 
         # translate split ratio to flow
         raw_action = raw_action.flatten() * self.obs[-self.num_path_node:]
@@ -288,6 +294,16 @@ class TealEnv(object):
 
         return action
 
+    def get_edge_util(self, path_flow):
+        edge_flow = torch_scatter.scatter(
+            path_flow[self.p2e[0]], self.p2e[1], dim_size=self.num_edge_node)
+        capacity = self.obs[:-self.num_path_node]
+        util = torch.zeros_like(edge_flow)
+        positive_cap = capacity > 0
+        util[positive_cap] = edge_flow[positive_cap] / capacity[positive_cap]
+        util[~positive_cap & (edge_flow > 0)] = 1e4
+        return util
+
     def take_action(self, raw_action, num_sample):
         '''Return an approximate reward for action for each node pair.
         To make function fast and scalable on GPU, we only calculate delta.
@@ -310,11 +326,7 @@ class TealEnv(object):
         '''
 
         path_flow = self.transform_raw_action(raw_action)
-        edge_flow = torch_scatter.scatter(
-            path_flow[self.p2e[0]], self.p2e[1], dim_size=self.num_edge_node)
-        #print(f"edge_flow = {edge_flow.size()}, self.obs = {self.obs.size()}, num_path_node = {self.num_path_node}, num_edge_node = {self.num_edge_node}")
-        #print(f"p2e_mat = {self.p2e_mat.size()}")
-        util = edge_flow/self.obs[:-self.num_path_node]
+        util = self.get_edge_util(path_flow)
 
         # sample from uniform distribution [mean_min, min_max]
         distribution = Uniform(
@@ -363,15 +375,20 @@ class TealEnv(object):
                 delta_util = torch.sparse.mm(delta_path_flow, bottleneck_p2e)
                 reward += torch.sparse.mm(delta_util, coef).flatten()
 
-        elif self.obj == 'min_max_link_util':
+        elif self.is_mlu_obj():
 
             # find link with max utilization
             max_util_edge = util.argmax()
 
             # prepare paths related to max_util_edge
             max_util_paths = torch.zeros(self.num_path_node).to(self.device)
-            max_util_paths[self.p2e[0, self.p2e[1] == max_util_edge]] =\
-                1/self.obs[max_util_edge]
+            cap = self.obs[max_util_edge]
+            coef = torch.where(
+                cap > 0,
+                1 / cap,
+                torch.tensor(1e4, device=self.device, dtype=cap.dtype)
+            )
+            max_util_paths[self.p2e[0, self.p2e[1] == max_util_edge]] = coef
 
             # sample raw_actions and change each node pair at a time for reward
             for _ in range(num_sample):

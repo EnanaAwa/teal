@@ -106,7 +106,7 @@ def benchmark(problems, output_csv, arg):
     exp_name = os.path.join(
         args.topo_name,
         "teal",
-        f"epoch{num_epoch}_b{batch_size}_lr{lr}_admm{num_admm_step}-{timestamp}.json"
+        f"{obj}_epoch{num_epoch}_b{batch_size}_lr{lr}_admm{num_admm_step}-{timestamp}.json"
     )
     output_path = os.path.join(
         OUT_DIR_BASE,
