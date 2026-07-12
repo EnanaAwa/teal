@@ -1,0 +1,43 @@
+TEAL MLU run: sanitized review extract
+topo_name: DynGEANT, num_clusters: 50, samples_per_cluster: 200
+dataset_dir: <DATA_ROOT>/DynGEANT
+settings: epochs=10, batch_size=16, learning_rate=0.001, seed=42, train_clusters=25, val_clusters=5, test_clusters=20
+
+Creating model <MODEL_ROOT>/DynGEANT_mlu_flowGNN-6_std-False.pt
+<PYTHON_ENV>/lib/python3.11/site-packages/torch/_weights_only_unpickler.py:549: UserWarning: Detected pickle protocol 4 in the checkpoint, which was not the default pickle protocol used by `torch.load` (2). The weights_only Unpickler might not support all instructions implemented by this protocol, please file an issue for adding support if you encounter this.
+  warnings.warn()
+Teal log path: <RESULT_ROOT>/DynGEANT/teal/mlu_epoch10_b16_lr0.001_admm0_seed42-20260711_142830.json
+
+Epoch 01 train complete: clusters=25/25, elapsed=00:49, last_cluster_batches=13/13, loss=-0.00194
+Epoch 01 validation complete: clusters=5/5, last_cluster_batches=13/13, rel_loss_mean=6.0539316, rel_loss_min=2.3000112, 1th=2.9534524
+Epoch 02 train complete: clusters=25/25, elapsed=00:46, last_cluster_batches=13/13, loss=-0.00178
+Epoch 02 validation complete: clusters=5/5, last_cluster_batches=13/13, rel_loss_mean=6.2518578, rel_loss_min=2.2931238, 1th=2.8932385
+Epoch 03 train complete: clusters=25/25, elapsed=00:46, last_cluster_batches=13/13, loss=-0.00140
+Epoch 03 validation complete: clusters=5/5, last_cluster_batches=13/13, rel_loss_mean=6.6598359, rel_loss_min=2.2740648, 1th=2.7134259
+Epoch 04 train complete: clusters=25/25, elapsed=00:48, last_cluster_batches=13/13, loss=-0.00139
+Epoch 04 validation complete: clusters=5/5, last_cluster_batches=13/13, rel_loss_mean=6.5687066, rel_loss_min=2.2900008, 1th=2.6915286
+Epoch 05 train complete: clusters=25/25, elapsed=00:48, last_cluster_batches=13/13, loss=-0.00146
+Epoch 05 validation complete: clusters=5/5, last_cluster_batches=13/13, rel_loss_mean=6.4169637, rel_loss_min=2.2934257, 1th=2.7833683
+Epoch 06 train complete: clusters=25/25, elapsed=00:47, last_cluster_batches=13/13, loss=-0.00187
+Epoch 06 validation complete: clusters=5/5, last_cluster_batches=13/13, rel_loss_mean=6.3763448, rel_loss_min=2.2991192, 1th=2.7541146
+Epoch 07 train complete: clusters=25/25, elapsed=00:48, last_cluster_batches=13/13, loss=-0.00209
+Epoch 07 validation complete: clusters=5/5, last_cluster_batches=13/13, rel_loss_mean=6.7266102, rel_loss_min=2.2838289, 1th=2.7405759
+Epoch 08 train complete: clusters=25/25, elapsed=00:48, last_cluster_batches=13/13, loss=-0.00199
+Epoch 08 validation complete: clusters=5/5, last_cluster_batches=13/13, rel_loss_mean=6.4923186, rel_loss_min=2.2866936, 1th=2.8350476
+Epoch 09 train complete: clusters=25/25, elapsed=00:48, last_cluster_batches=13/13, loss=-0.00191
+Epoch 09 validation complete: clusters=5/5, last_cluster_batches=13/13, rel_loss_mean=6.3413922, rel_loss_min=2.2951126, 1th=2.8746473
+Epoch 10 train complete: clusters=25/25, elapsed=00:51, last_cluster_batches=13/13, loss=-0.00167
+Epoch 10 validation complete: clusters=5/5, last_cluster_batches=13/13, rel_loss_mean=6.3860468, rel_loss_min=2.2951165, 1th=2.8632308
+
+Test complete: clusters=20/20, last_cluster_batches=13/13, rel_loss_mean=5.5743930, rel_loss_min=1.2756066, 1th=1.8164566
+rel loss mean = 5.5743929984812866, min = 1.275606563446206
+1-th: 1.8164565588318395
+5-th: 2.0273820597128775
+10-th: 2.3156975522886567
+25-th: 3.185144772029554
+50-th: 5.419145096496505
+75-th: 7.393448136401233
+90-th: 9.82878116556005
+99-th: 11.90193414688666
+max = 13.571400917592609
+Saving teal results to: <RESULT_ROOT>/DynGEANT/teal/mlu_epoch10_b16_lr0.001_admm0_seed42-20260711_142830.json

@@ -1,0 +1,43 @@
+TEAL MLU run: sanitized review extract
+topo_name: geant, num_samples: 10772
+dataset_dir: <DATA_ROOT>/geant
+settings: epochs=10, batch_size=16, learning_rate=0.001, seed=42, train_samples=6463, val_samples=1616, test_samples=2693
+
+Creating model <MODEL_ROOT>/geant_mlu_flowGNN-6_std-False.pt
+<PYTHON_ENV>/lib/python3.11/site-packages/torch/_weights_only_unpickler.py:549: UserWarning: Detected pickle protocol 4 in the checkpoint, which was not the default pickle protocol used by `torch.load` (2). The weights_only Unpickler might not support all instructions implemented by this protocol, please file an issue for adding support if you encounter this.
+  warnings.warn()
+Teal log path: <RESULT_ROOT>/geant/teal/mlu_epoch10_b16_lr0.001_admm0_seed42-20260711_161851.json
+
+Epoch 01 train complete: batches=404/404, elapsed=01:08, loss=0.00480
+Epoch 01 validation complete: batches=101/101, rel_loss_mean=2.1064827, rel_loss_min=1.2837264, 1th=1.3599632
+Epoch 02 train complete: batches=404/404, elapsed=01:08, loss=0.00492
+Epoch 02 validation complete: batches=101/101, rel_loss_mean=1.8465748, rel_loss_min=1.0098454, 1th=1.2233912
+Epoch 03 train complete: batches=404/404, elapsed=01:16, loss=0.00490
+Epoch 03 validation complete: batches=101/101, rel_loss_mean=1.9190719, rel_loss_min=1.2210064, 1th=1.3264695
+Epoch 04 train complete: batches=404/404, elapsed=01:07, loss=0.00512
+Epoch 04 validation complete: batches=101/101, rel_loss_mean=1.8626461, rel_loss_min=1.1632877, 1th=1.2870820
+Epoch 05 train complete: batches=404/404, elapsed=01:07, loss=0.00503
+Epoch 05 validation complete: batches=101/101, rel_loss_mean=1.8457023, rel_loss_min=1.1936599, 1th=1.2938448
+Epoch 06 train complete: batches=404/404, elapsed=01:06, loss=0.00513
+Epoch 06 validation complete: batches=101/101, rel_loss_mean=1.8142724, rel_loss_min=1.1827141, 1th=1.2945503
+Epoch 07 train complete: batches=404/404, elapsed=01:02, loss=0.00517
+Epoch 07 validation complete: batches=101/101, rel_loss_mean=1.7561349, rel_loss_min=1.1363845, 1th=1.2292119
+Epoch 08 train complete: batches=404/404, elapsed=01:04, loss=0.00528
+Epoch 08 validation complete: batches=101/101, rel_loss_mean=1.6856793, rel_loss_min=1.0797124, 1th=1.1861574
+Epoch 09 train complete: batches=404/404, elapsed=01:05, loss=0.00532
+Epoch 09 validation complete: batches=101/101, rel_loss_mean=1.6832055, rel_loss_min=1.0972674, 1th=1.2568677
+Epoch 10 train complete: batches=404/404, elapsed=01:04, loss=0.00524
+Epoch 10 validation complete: batches=101/101, rel_loss_mean=1.5130967, rel_loss_min=1.0149061, 1th=1.1557366
+
+Test complete: batches=169/169, rel_loss_mean=1.5743498, rel_loss_min=1.3026629, 1th=1.3371561
+rel loss mean = 1.5743498202032575, min = 1.3026628989344857
+1-th: 1.337156082142225
+5-th: 1.3869344009848565
+10-th: 1.4121284226051496
+25-th: 1.4564918494536412
+50-th: 1.5223289247198886
+75-th: 1.6313053026904132
+90-th: 1.8205447699712967
+99-th: 2.196773718692839
+max = 2.7505604998781834
+Saving teal results to: <RESULT_ROOT>/geant/teal/mlu_epoch10_b16_lr0.001_admm0_seed42-20260711_161851.json

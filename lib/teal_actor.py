@@ -22,6 +22,7 @@ class TealActor(nn.Module):
             model_dir, 
             model_save, 
             device,
+            model_load=False,
             std=1, log_std_min=-10.0, log_std_max=10.0):
         """Initialize teal actor.
 
@@ -64,8 +65,10 @@ class TealActor(nn.Module):
         self.model_fname = self.model_full_fname(
             model_dir, self.env.topo, num_layer, std)
         self.model_save = model_save
-        # load model
-        self.load_model()
+        if model_load:
+            self.load_model()
+        else:
+            self.initialize_model()
     
     def reset_num_path_node(self, num_path_node):
         self.num_path_node = num_path_node
@@ -75,30 +78,35 @@ class TealActor(nn.Module):
         """Return full name of the ML model."""
 
         return os.path.join(
-            model_dir, "{}_flowGNN-{}_std-{}.pt".format(
-                topo, num_layer, std < 0))
+            model_dir, "{}_{}_flowGNN-{}_std-{}.pt".format(
+                topo, self.env.obj, num_layer, std < 0))
 
     def load_model(self):
         """Load from model fname."""
 
-        if os.path.exists(self.model_fname):
-            print_(f'Loading Teal model from {self.model_fname}')
-            if self.device.type == 'cpu':
-                self.load_state_dict(
-                    torch.load(
-                        self.model_fname, map_location=torch.device('cpu')))
-            else:
-                self.load_state_dict(torch.load(self.model_fname))
-        else:
-            print_(f'Creating model {self.model_fname}')
-            # weight initialization for neural networks
-            self.apply(weight_initialization)
+        if not os.path.exists(self.model_fname):
+            raise FileNotFoundError(
+                f'Requested Teal checkpoint does not exist: {self.model_fname}'
+            )
+        print_(f'Loading Teal model from {self.model_fname}')
+        self.load_state_dict(
+            torch.load(self.model_fname, map_location=self.device)
+        )
+
+    def initialize_model(self):
+        """Initialize a new model instead of resuming a checkpoint."""
+
+        print_(f'Creating model {self.model_fname}')
+        self.apply(weight_initialization)
 
     def save_model(self):
         """Save from model fname."""
 
         if self.model_save:
             print_(f'Saving Teal model from {self.model_fname}')
+            model_dir = os.path.dirname(self.model_fname)
+            if model_dir:
+                os.makedirs(model_dir, exist_ok=True)
             torch.save(self.state_dict(), self.model_fname)
 
     def forward(self, feature):

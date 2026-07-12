@@ -7,6 +7,7 @@ import pickle
 import os
 
 from collections import defaultdict
+from ..networkx_compat import node_link_graph
 from typing import (
     List,
     Optional
@@ -118,7 +119,7 @@ def _read_graph_from_json(
     with open(topology_path, "r") as f:
         json_data = json.load(f)
     
-    graph = nx.readwrite.json_graph.node_link_graph(json_data)
+    graph = node_link_graph(json_data)
 
     if failure_id is not None:
         #print(f"failure_id = {failure_id}")
