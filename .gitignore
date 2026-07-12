@@ -122,6 +122,7 @@ celerybeat.pid
 # Environments
 .env
 .venv
+.venv-mlu/
 env/
 venv/
 ENV/
@@ -161,3 +162,10 @@ cython_debug/
 
 # path folders
 topologies/paths/ncflow-edge-per-iter/
+
+# Local experiment artifacts
+results/
+teal-models/
+teal-logs/
+run/teal-models/
+run/teal-logs/

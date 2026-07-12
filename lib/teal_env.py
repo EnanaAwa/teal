@@ -7,8 +7,6 @@ import random
 from itertools import product
 from collections import defaultdict
 
-from networkx.readwrite import json_graph
-
 import torch
 import torch_scatter
 import torch.nn as nn
@@ -17,6 +15,7 @@ from torch.distributions.uniform import Uniform
 
 from .config import TOPOLOGIES_DIR
 from .ADMM import ADMM
+from .networkx_compat import node_link_graph
 from .path_utils import find_paths, graph_copy_with_edge_weights, remove_cycles
 
 
@@ -413,7 +412,7 @@ class TealEnv(object):
         assert topo.endswith(".json")
         with open(os.path.join(TOPOLOGIES_DIR, topo)) as f:
             data = json.load(f)
-        return json_graph.node_link_graph(data)
+        return node_link_graph(data)
 
     def path_full_fname(self, topo, num_path, edge_disjoint, dist_metric):
         """Return full name of the topology path."""

@@ -5,9 +5,11 @@ import argparse
 import os
 import sys
 
-sys.path.append("..")
+ROOT_DIR = os.path.realpath(os.path.join(os.path.dirname(__file__), ".."))
+if ROOT_DIR not in sys.path:
+    sys.path.insert(0, ROOT_DIR)
 
-from lib.config import TOPOLOGIES_DIR, TM_DIR
+from lib.config import TL_DIR, TOPOLOGIES_DIR, TM_DIR
 
 PROBLEM_NAMES = [
     'B4.json',
@@ -23,6 +25,17 @@ SCALE_FACTORS = [1.0]
 OBJ_STRS = ["total_flow", "min_max_link_util", "mlu"]
 
 PATH_FORM_HYPERPARAMS = (4, False, "min-hop")
+
+
+def parse_bool(value):
+    if isinstance(value, bool):
+        return value
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise argparse.ArgumentTypeError(f"invalid boolean value: {value}")
 
 PROBLEM_NAMES_AND_TM_MODELS = [
     (prob_name, tm_model) for prob_name in PROBLEM_NAMES
@@ -106,7 +119,8 @@ def get_args_and_problems(formatted_fname_template, additional_args=[]):
     parser.add_argument(
         "--data_dir",
         type=str,
-        default="/workspace/NetAI/data_kaete/DynGEANT"
+        required=True,
+        help="dataset directory containing Catalog, TMs, Opt, and topology data",
     )
     parser.add_argument(
         "--topo_name", 
@@ -120,6 +134,13 @@ def get_args_and_problems(formatted_fname_template, additional_args=[]):
         type=int, 
         default=4,
     )
+    parser.add_argument('--num-clusters', type=int, default=50)
+    parser.add_argument('--num-train-clusters', type=int, default=30)
+    parser.add_argument('--num-val-clusters', type=int, default=5)
+    parser.add_argument('--train-test-split', type=float, default=0.75)
+    parser.add_argument(
+        '--max-dataset-samples', type=int, default=0,
+        help='limit static data or samples per dynamic cluster for smoke tests; 0 uses all data')
     parser.add_argument(
         "--scale-factor", type=float, default=1.0, choices=SCALE_FACTORS,
         help="traffic matrix scale factor")
@@ -127,8 +148,20 @@ def get_args_and_problems(formatted_fname_template, additional_args=[]):
         '--devid', type=int, default=0,
         help='GPU device id')
     parser.add_argument(
-        '--model-save', type=bool, default=False,
+        '--model-save', nargs='?', const=True, default=False, type=parse_bool,
         help='whether to save model')
+    parser.add_argument(
+        '--model-load', nargs='?', const=True, default=False, type=parse_bool,
+        help='load weights from an existing checkpoint for the same objective')
+    parser.add_argument(
+        '--model-dir', type=str, default=os.path.join(TL_DIR, 'teal-models'),
+        help='directory for objective-specific model checkpoints')
+    parser.add_argument(
+        '--result-dir', type=str, default=os.path.join(TL_DIR, 'results'),
+        help='root directory for JSON experiment results')
+    parser.add_argument(
+        '--seed', type=int, default=42,
+        help='Python, NumPy, and PyTorch random seed')
 
     # env hyper-parameters
     parser.add_argument(
@@ -175,7 +208,7 @@ def get_args_and_problems(formatted_fname_template, additional_args=[]):
         '--admm-steps', type=int, default=3,
         help='number of ADMM steps')
     parser.add_argument(
-        '--early-stop', type=bool, default=False,
+        '--early-stop', nargs='?', const=True, default=False, type=parse_bool,
         help='whether to stop early')
 
     # testing hyper-parameters
@@ -197,7 +230,7 @@ def get_args_and_problems(formatted_fname_template, additional_args=[]):
         "--profile-result-dir",
         dest="profile_result_dir",
         type=str,
-        default="/workspace/NetAI/KaeTE/results/profile/teal",
+        default=os.path.join(TL_DIR, "results", "profile", "teal"),
         help="Directory for TEAL inference profile logs.")
 
     for add_arg in additional_args:

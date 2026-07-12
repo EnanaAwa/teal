@@ -5,8 +5,6 @@ import sys
 import os
 import numpy as np
 from tqdm import tqdm
-from networkx.readwrite import json_graph
-
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -31,7 +29,13 @@ class Teal():
         teal_env, 
         teal_actor, 
         lr, 
-        early_stop):
+        early_stop,
+        num_clusters=50,
+        num_train_clusters=30,
+        num_val_clusters=5,
+        train_test_split=0.75,
+        max_dataset_samples=0,
+        seed=42):
         """Initialize Teal model.
 
         Args:
@@ -48,11 +52,6 @@ class Teal():
         self.env = teal_env
         self.actor = teal_actor
 
-
-        # TODO: tidy up these hyperparameters
-        NUM_CLUSTERS = 50
-        NUM_TRAIN_CLUSTERS = 30
-
         if topo_name == "DynGEANT":
             (
                 self.train_loaders, \
@@ -62,9 +61,11 @@ class Teal():
                 self.data_dir,
                 self.topo_name,
                 self.num_path,
-                NUM_CLUSTERS,
-                NUM_TRAIN_CLUSTERS,
-                self.batch_size
+                num_clusters,
+                num_train_clusters,
+                self.batch_size,
+                num_val_clusters,
+                max_dataset_samples,
             )
         # TODO: load static dataset
         else:
@@ -76,7 +77,10 @@ class Teal():
                 self.data_dir,
                 self.topo_name,
                 self.num_path,
-                self.batch_size
+                self.batch_size,
+                train_test_split,
+                max_dataset_samples,
+                seed,
             )
 
 
@@ -99,6 +103,9 @@ class Teal():
         self.env.training = True
 
         for epoch in range(num_epoch):
+            self.actor.train()
+            self.env.training = True
+            self.env.reset('train')
             for train_loader in tqdm(self.train_loaders):
                 p2e_matrix = train_loader.dataset.pte
                 self.env.set_topo_info(p2e_matrix)
@@ -109,6 +116,7 @@ class Teal():
                 for (_, link_caps, tms, opts) in pbar:
                     batch_size = tms.size(0)
                     loss = 0
+                    self.actor_optimizer.zero_grad()
                     tms = tms.squeeze(dim=-1)
                     for idx in range(batch_size):
                         tm = tms[idx,:]
@@ -124,11 +132,10 @@ class Teal():
                         )
                         loss += (-log_probs * reward).mean()
                         loss_val_mean.append(reward.mean().item() / opts[idx].item())
-                
+
+                    loss.backward()
+                    self.actor_optimizer.step()
                     pbar.set_postfix({'loss': '%.5f' % (np.mean(loss_val_mean))})
-                self.actor_optimizer.zero_grad()
-                loss.backward()
-                self.actor_optimizer.step()
             
             self.val()
 
@@ -165,8 +172,7 @@ class Teal():
             #            - sum(self.val_reward[-10:])/10) < 0.0001:
             #        break
         
-        #FIXME:
-        #self.actor.save_model()
+        self.actor.save_model()
 
     def val(self):
         """Validating Teal model."""
@@ -202,7 +208,7 @@ class Teal():
                                   '1th': '%.7f' % (np.percentile(rewards, 1))})
         return rewards
 
-    def test(self, num_admm_step, output_path):
+    def test(self, num_admm_step, output_path, settings=None):
         """Test Teal model.
 
         Args:
@@ -217,6 +223,7 @@ class Teal():
         #self.env.reset('test')
 
         reward_lst = []
+        raw_objective_lst = []
         for test_loader in self.test_loaders:
             p2e_matrix = test_loader.dataset.pte
             self.env.set_topo_info(p2e_matrix)
@@ -234,6 +241,7 @@ class Teal():
                     obs = self.env.get_obs()
                     raw_action = self.actor.act(obs)
                     reward, info = self.env.step(raw_action, num_admm_step=num_admm_step)
+                    raw_objective_lst.append(reward.item())
                     reward_lst.append(reward.item() / opts[idx].item())
                 pbar.set_postfix({'rel_loss_mean': '%.7f' % (np.mean(reward_lst)),
                                   'rel_loss_min': '%.7f' % (np.min(reward_lst)),
@@ -244,16 +252,20 @@ class Teal():
         )
         print(f"Saving teal results to: {output_path}")
         with open(output_path, "w") as f:
-            json.dump(
-                {"results": reward_lst},
-                f
-            )
+            payload = {
+                "results": reward_lst,
+            }
+            raw_key = "raw_mlu" if self.env.is_mlu_obj() else "raw_objective"
+            payload[raw_key] = raw_objective_lst
+            if settings is not None:
+                payload["settings"] = settings
+            json.dump(payload, f, indent=2)
 
     @torch.no_grad()
     def profile_inference(
         self,
         num_admm_step,
-        output_dir="/workspace/NetAI/KaeTE/results/profile/teal",
+        output_dir=None,
         warmup_samples=20
     ):
         """Profile TEAL end-to-end inference time on test loaders.
@@ -264,6 +276,11 @@ class Teal():
         """
         self.actor.eval()
         self.env.training = False
+
+        if output_dir is None:
+            output_dir = os.path.realpath(os.path.join(
+                os.path.dirname(__file__), "..", "results", "profile", "teal"
+            ))
 
         latencies_s = []
         samples_seen = 0
@@ -364,7 +381,8 @@ def _load_dyn_dataset(
     num_clusters,
     num_train_clusters,
     batch_size: int = 16,
-    num_val_clusters: int = 5
+    num_val_clusters: int = 5,
+    max_dataset_samples: int = 0,
 ):
     
     num_train = (
@@ -372,12 +390,14 @@ def _load_dyn_dataset(
             num_val_clusters
     )
     train_loaders = []
+    sample_end = max_dataset_samples if max_dataset_samples > 0 else None
     for i in range(0, num_train):
         dataset = SingleClusterDataset(
             data_dir,
             topo_name,
             cluster_id=i,
-            num_paths_per_pair=num_paths
+            num_paths_per_pair=num_paths,
+            end=sample_end,
         )
         train_loaders.append(
             torch.utils.data.DataLoader(
@@ -393,7 +413,8 @@ def _load_dyn_dataset(
             data_dir,
             topo_name,
             cluster_id=i,
-            num_paths_per_pair=num_paths
+            num_paths_per_pair=num_paths,
+            end=sample_end,
         )
         val_loaders.append(
             torch.utils.data.DataLoader(
@@ -409,7 +430,8 @@ def _load_dyn_dataset(
             data_dir,
             topo_name,
             cluster_id=i,
-            num_paths_per_pair=num_paths
+            num_paths_per_pair=num_paths,
+            end=sample_end,
         )
         test_loaders.append(
             torch.utils.data.DataLoader(
@@ -427,9 +449,13 @@ def _load_static_dataset(
     topo_name,
     num_paths,
     batch_size,
-    train_test_split: float = 0.75
+    train_test_split: float = 0.75,
+    max_dataset_samples: int = 0,
+    seed: int = 42,
 ):
     num_samples = _get_num_samples(data_dir)
+    if max_dataset_samples > 0:
+        num_samples = min(num_samples, max_dataset_samples)
     print(f"topo_name: {topo_name}, num_samples: {num_samples}")
     num_train = int(train_test_split * num_samples)
 
@@ -442,7 +468,7 @@ def _load_static_dataset(
         end=num_train
     )
     
-    rng = np.random.default_rng(seed=42)
+    rng = np.random.default_rng(seed=seed)
     indices = rng.permutation(num_train).tolist()
 
     num_train_samples = int(0.8 * num_train)

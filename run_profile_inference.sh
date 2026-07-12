@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DATA_BASE=${DATA_BASE:-/workspace/NetAI/data}
-PROFILE_RESULT_DIR=${PROFILE_RESULT_DIR:-/workspace/NetAI/KaeTE/results/profile/teal}
+ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+: "${DATA_BASE:?Set DATA_BASE to the dataset root}"
+PROFILE_RESULT_DIR=${PROFILE_RESULT_DIR:-"${ROOT_DIR}/results/profile/teal"}
+PYTHON=${PYTHON:-python}
 
 BATCH_SIZE=${BATCH_SIZE:-1}
 NUM_PATHS_PER_PAIR=${NUM_PATHS_PER_PAIR:-4}
@@ -16,7 +18,12 @@ DEVID=${DEVID:-0}
 
 TOPOLOGIES=${TOPOLOGIES:-"DynGEANT geant"}
 
-cd "$(dirname "$0")/run"
+if ! command -v "${PYTHON}" >/dev/null 2>&1; then
+    echo "Python environment not found: ${PYTHON}" >&2
+    exit 1
+fi
+
+cd "${ROOT_DIR}/run"
 
 for topo_name in ${TOPOLOGIES}; do
     data_dir="${DATA_BASE}/${topo_name}"
@@ -25,7 +32,7 @@ for topo_name in ${TOPOLOGIES}; do
         exit 1
     fi
 
-    python teal.py \
+    "${PYTHON}" teal.py \
         --profile-inference \
         --profile-warmup-samples "${PROFILE_WARMUP_SAMPLES}" \
         --profile-result-dir "${PROFILE_RESULT_DIR}" \

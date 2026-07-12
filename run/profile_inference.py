@@ -13,7 +13,9 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
-sys.path.append("..")
+ROOT_DIR = os.path.realpath(os.path.join(os.path.dirname(__file__), ".."))
+if ROOT_DIR not in sys.path:
+    sys.path.insert(0, ROOT_DIR)
 
 from lib.dataset_loader.dataset_cluster import SingleClusterDataset
 from lib.teal_actor import TealActor
@@ -73,6 +75,7 @@ def _make_teal_components(args, device):
         model_dir=args.model_dir,
         model_save=False,
         device=device,
+        model_load=args.model_load,
     )
     teal_actor.eval()
     teal_env.training = False
@@ -182,6 +185,8 @@ def profile(args):
             "rho": args.rho,
             "admm_steps": args.admm_steps,
             "obj": args.obj,
+            "model_load": args.model_load,
+            "model_dir": os.path.realpath(args.model_dir),
             "num_model_parameters": sum(p.numel() for p in teal_actor.parameters()),
             "timestamp": timestamp,
         }
@@ -215,7 +220,7 @@ def make_args():
     parser.add_argument("--topo_name", required=True)
     parser.add_argument(
         "--result_dir",
-        default="/workspace/NetAI/KaeTE/results/profile/teal",
+        default=os.path.join(ROOT_DIR, "results", "profile", "teal"),
     )
     parser.add_argument("--num_paths_per_pair", type=int, default=4)
     parser.add_argument("--bsz", type=int, default=1)
@@ -226,7 +231,15 @@ def make_args():
     parser.add_argument("--layers", type=int, default=6)
     parser.add_argument("--rho", type=float, default=1.0)
     parser.add_argument("--obj", type=str, default="total_flow")
-    parser.add_argument("--model_dir", default="teal-models")
+    parser.add_argument(
+        "--model_dir",
+        default=os.path.join(ROOT_DIR, "teal-models"),
+    )
+    parser.add_argument(
+        "--model-load",
+        action="store_true",
+        help="require and load weights from an objective-specific checkpoint",
+    )
     parser.add_argument("--device", choices=["auto", "cpu", "cuda"], default="auto")
     return parser.parse_args()
 
